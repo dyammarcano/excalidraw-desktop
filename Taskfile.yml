@@ -1,0 +1,324 @@
+version: '3'
+
+vars:
+  EXCALIDRAW_DIR: src
+  EXCALIDRAW_APP_DIR: src/excalidraw-app
+  BUILD_DIR: src/excalidraw-app/build
+  TAURI_ASSETS_DIR: tauri-assets
+  TAURI_DIR: src-tauri
+
+tasks:
+  default:
+    desc: "Show available tasks"
+    cmds:
+      - task --list
+
+  # ============================================================================
+  # Excalidraw Build Tasks
+  # ============================================================================
+
+  excalidraw:install:
+    desc: "Install Excalidraw dependencies"
+    dir: "{{.EXCALIDRAW_DIR}}"
+    cmds:
+      - yarn install
+    sources:
+      - package.json
+      - yarn.lock
+    generates:
+      - node_modules/**/*
+
+  excalidraw:build-packages:
+    desc: "Build Excalidraw packages (common, math, element, excalidraw)"
+    dir: "{{.EXCALIDRAW_DIR}}"
+    deps:
+      - excalidraw:install
+    cmds:
+      - yarn build:packages
+    sources:
+      - packages/common/**/*.ts
+      - packages/math/**/*.ts
+      - packages/element/**/*.ts
+      - packages/excalidraw/**/*.ts
+      - packages/excalidraw/**/*.tsx
+    generates:
+      - packages/common/dist/**/*
+      - packages/math/dist/**/*
+      - packages/element/dist/**/*
+      - packages/excalidraw/dist/**/*
+
+  excalidraw:build-app:
+    desc: "Build Excalidraw app for production"
+    dir: "{{.EXCALIDRAW_APP_DIR}}"
+    deps:
+      - excalidraw:build-packages
+    cmds:
+      - yarn build:app:docker
+    sources:
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.scss"
+      - index.html
+      - vite.config.mts
+    generates:
+      - build/**/*
+
+  excalidraw:integrate-tauri:
+    desc: "Integrate Tauri bridge with Excalidraw build"
+    deps:
+      - excalidraw:build-app
+    cmds:
+      - cmd: echo "Copying tauri-bridge.js to build directory..."
+        silent: true
+      - cp {{.TAURI_ASSETS_DIR}}/tauri-bridge.js {{.BUILD_DIR}}/tauri-bridge.js
+      - cmd: echo "Injecting script tag into index.html..."
+        silent: true
+      - powershell -Command "$file = '{{.BUILD_DIR}}/index.html'; $content = Get-Content $file -Raw; if ($content -notmatch 'tauri-bridge.js') { $content = $content -replace '</body>', '<script src=\"/tauri-bridge.js\"></script></body>'; Set-Content $file $content -NoNewline; Write-Host 'Script tag injected' } else { Write-Host 'Script tag already present' }"
+      - cmd: echo "Tauri integration complete!"
+        silent: true
+
+  excalidraw:rebuild:
+    desc: "Complete rebuild of Excalidraw (packages + app + Tauri integration)"
+    cmds:
+      - task: excalidraw:build-packages
+      - task: excalidraw:build-app
+      - task: excalidraw:integrate-tauri
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "========================================="
+        silent: true
+      - cmd: echo "Excalidraw rebuild complete!"
+        silent: true
+      - cmd: echo "========================================="
+        silent: true
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "Next steps - task dev (development) or task build (production)"
+        silent: true
+      - cmd: echo ""
+        silent: true
+
+  excalidraw:update:
+    desc: "Update Excalidraw from upstream and rebuild"
+    dir: "{{.EXCALIDRAW_DIR}}"
+    cmds:
+      - cmd: echo "Updating Excalidraw from upstream..."
+        silent: true
+      - git pull origin main
+      - cmd: echo "Installing updated dependencies..."
+        silent: true
+      - task: excalidraw:install
+      - cmd: echo "Rebuilding Excalidraw..."
+        silent: true
+      - task: excalidraw:rebuild
+
+  # ============================================================================
+  # Tauri Tasks
+  # ============================================================================
+
+  dev:
+    desc: "Run Tauri app in development mode"
+    dir: "{{.TAURI_DIR}}/.."
+    cmds:
+      - cargo tauri dev
+
+  build:
+    desc: "Build production Tauri installers"
+    dir: "{{.TAURI_DIR}}/.."
+    cmds:
+      - cmd: echo "Building production installers..."
+        silent: true
+      - cargo tauri build
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "========================================="
+        silent: true
+      - cmd: echo "Production build complete!"
+        silent: true
+      - cmd: echo "========================================="
+        silent: true
+      - cmd: echo "Installers created in src-tauri/target/release/bundle/"
+        silent: true
+      - cmd: echo ""
+        silent: true
+
+  # ============================================================================
+  # Cleaning Tasks
+  # ============================================================================
+
+  clean:excalidraw:
+    desc: "Clean Excalidraw build artifacts"
+    cmds:
+      - cmd: echo "Cleaning Excalidraw build artifacts..."
+        silent: true
+      - rm -rf {{.EXCALIDRAW_DIR}}/packages/common/dist
+      - rm -rf {{.EXCALIDRAW_DIR}}/packages/math/dist
+      - rm -rf {{.EXCALIDRAW_DIR}}/packages/element/dist
+      - rm -rf {{.EXCALIDRAW_DIR}}/packages/excalidraw/dist
+      - rm -rf {{.BUILD_DIR}}
+      - cmd: echo "Excalidraw artifacts cleaned"
+        silent: true
+
+  clean:tauri:
+    desc: "Clean Tauri build artifacts"
+    dir: "{{.TAURI_DIR}}"
+    cmds:
+      - cmd: echo "Cleaning Tauri build artifacts..."
+        silent: true
+      - cargo clean
+      - cmd: echo "Tauri artifacts cleaned"
+        silent: true
+
+  clean:all:
+    desc: "Clean all build artifacts (Excalidraw + Tauri)"
+    cmds:
+      - task: clean:excalidraw
+      - task: clean:tauri
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "All artifacts cleaned"
+        silent: true
+
+  clean:node_modules:
+    desc: "Remove node_modules (deep clean)"
+    cmds:
+      - cmd: echo "Removing node_modules..."
+        silent: true
+      - rm -rf {{.EXCALIDRAW_DIR}}/node_modules
+      - cmd: echo "node_modules removed - Run task excalidraw install to reinstall"
+        silent: true
+
+  # ============================================================================
+  # Utility Tasks
+  # ============================================================================
+
+  check:
+    desc: "Check project structure and dependencies"
+    cmds:
+      - cmd: echo "Checking project structure..."
+        silent: true
+      - cmd: echo ""
+        silent: true
+      - powershell -Command "if (Test-Path '{{.EXCALIDRAW_DIR}}') { Write-Host 'Excalidraw source OK' } else { Write-Host 'Excalidraw source MISSING' }"
+      - powershell -Command "if (Test-Path '{{.EXCALIDRAW_DIR}}/packages/excalidraw/dist') { Write-Host 'Packages built OK' } else { Write-Host 'Packages NOT built' }"
+      - powershell -Command "if (Test-Path '{{.BUILD_DIR}}') { Write-Host 'App built OK' } else { Write-Host 'App NOT built' }"
+      - powershell -Command "if (Test-Path '{{.BUILD_DIR}}/tauri-bridge.js') { Write-Host 'Tauri bridge OK' } else { Write-Host 'Tauri bridge MISSING' }"
+      - cmd: echo ""
+        silent: true
+
+  tree:
+    desc: "Show project structure"
+    cmds:
+      - twig -i "node_modules,target,dist,cache,.cache,assets,.git,build" --depth 2
+
+  # ============================================================================
+  # First-time Setup
+  # ============================================================================
+
+  setup:
+    desc: "First-time setup - install dependencies and build everything"
+    cmds:
+      - cmd: echo "========================================="
+        silent: true
+      - cmd: echo "Setting up Excalidraw Desktop"
+        silent: true
+      - cmd: echo "========================================="
+        silent: true
+      - cmd: echo ""
+        silent: true
+      - task: excalidraw:install
+      - task: excalidraw:rebuild
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "========================================="
+        silent: true
+      - cmd: echo "Setup complete!"
+        silent: true
+      - cmd: echo "========================================="
+        silent: true
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "Quick start - task dev (development) or task build (production)"
+        silent: true
+      - cmd: echo "For all tasks - task --list"
+        silent: true
+      - cmd: echo ""
+        silent: true
+
+  # ============================================================================
+  # Testing Tasks
+  # ============================================================================
+
+  test:
+    desc: "Run Excalidraw tests"
+    dir: "{{.EXCALIDRAW_DIR}}"
+    cmds:
+      - yarn test
+
+  test:update:
+    desc: "Run tests with snapshot updates"
+    dir: "{{.EXCALIDRAW_DIR}}"
+    cmds:
+      - yarn test:update
+
+  typecheck:
+    desc: "Run TypeScript type checking"
+    dir: "{{.EXCALIDRAW_DIR}}"
+    cmds:
+      - yarn test:typecheck
+
+  # ============================================================================
+  # Help Task
+  # ============================================================================
+
+  help:
+    desc: "Show detailed help information"
+    cmds:
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "========================================="
+        silent: true
+      - cmd: echo "Excalidraw Desktop - Task Reference"
+        silent: true
+      - cmd: echo "========================================="
+        silent: true
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "BUILD TASKS"
+        silent: true
+      - cmd: echo "  task setup                  - First-time setup"
+        silent: true
+      - cmd: echo "  task excalidraw rebuild     - Rebuild Excalidraw completely"
+        silent: true
+      - cmd: echo "  task excalidraw update      - Update from upstream and rebuild"
+        silent: true
+      - cmd: echo "  task dev                    - Start development mode"
+        silent: true
+      - cmd: echo "  task build                  - Build production installer"
+        silent: true
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "CLEAN TASKS"
+        silent: true
+      - cmd: echo "  task clean excalidraw       - Clean Excalidraw artifacts"
+        silent: true
+      - cmd: echo "  task clean tauri            - Clean Tauri artifacts"
+        silent: true
+      - cmd: echo "  task clean all              - Clean everything"
+        silent: true
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "UTILITY TASKS"
+        silent: true
+      - cmd: echo "  task check                  - Check project status"
+        silent: true
+      - cmd: echo "  task tree                   - Show project structure"
+        silent: true
+      - cmd: echo "  task test                   - Run tests"
+        silent: true
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "For full list run task --list"
+        silent: true
+      - cmd: echo ""
+        silent: true
