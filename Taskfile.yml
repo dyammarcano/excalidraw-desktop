@@ -14,6 +14,28 @@ tasks:
       - task --list
 
   # ============================================================================
+  # Submodules
+  # ============================================================================
+
+  submodules:init:
+    desc: "Init and update git submodules"
+    cmds:
+      - git submodule sync --recursive
+      - git submodule update --init --recursive
+
+  submodules:check:
+    desc: "Show submodule status and detected EXCALIDRAW_DIR"
+    cmds:
+      - cmd: echo "Submodule status:"
+        silent: true
+      - git submodule status --recursive
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "Detected EXCALIDRAW_DIR={{.EXCALIDRAW_DIR}}"
+        silent: true
+#      - cmd: powershell -NoProfile -Command "if (Test-Path '{{.EXCALIDRAW_DIR}}/package.json') { Write-Host 'OK: package.json found' } else { Write-Host 'ERROR: package.json missing' }"
+
+  # ============================================================================
   # Excalidraw Build Tasks
   # ============================================================================
 
