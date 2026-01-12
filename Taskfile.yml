@@ -56,6 +56,9 @@ tasks:
     deps:
       - excalidraw:install
     cmds:
+      # Clean type files first to avoid TypeScript conflicts
+      - cmd: rm -rf packages/common/dist/types packages/math/dist/types packages/element/dist/types packages/excalidraw/dist/types
+        ignore_error: true
       - yarn build:packages
     sources:
       - packages/common/**/*.ts
@@ -75,7 +78,25 @@ tasks:
     deps:
       - excalidraw:build-packages
     cmds:
+      # Temporarily rename dist/types to avoid TypeScript conflicts during vite build
+      - cmd: mv ../packages/common/dist/types ../packages/common/dist/types.bak 2>nul || true
+        ignore_error: true
+      - cmd: mv ../packages/math/dist/types ../packages/math/dist/types.bak 2>nul || true
+        ignore_error: true
+      - cmd: mv ../packages/element/dist/types ../packages/element/dist/types.bak 2>nul || true
+        ignore_error: true
+      - cmd: mv ../packages/excalidraw/dist/types ../packages/excalidraw/dist/types.bak 2>nul || true
+        ignore_error: true
       - yarn build:app:docker
+      # Restore dist/types folders
+      - cmd: mv ../packages/common/dist/types.bak ../packages/common/dist/types 2>nul || true
+        ignore_error: true
+      - cmd: mv ../packages/math/dist/types.bak ../packages/math/dist/types 2>nul || true
+        ignore_error: true
+      - cmd: mv ../packages/element/dist/types.bak ../packages/element/dist/types 2>nul || true
+        ignore_error: true
+      - cmd: mv ../packages/excalidraw/dist/types.bak ../packages/excalidraw/dist/types 2>nul || true
+        ignore_error: true
     sources:
       - "**/*.ts"
       - "**/*.tsx"
